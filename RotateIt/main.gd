@@ -8,7 +8,7 @@ var block_sz = Vector2(48, 48)
 
 var playground_sz = Vector2(300, 300)
 
-const board_sz = Vector2(6, 6)
+const board_sz = Vector2(5, 5)
 
 var start_block = Vector2(0, 0)
 
@@ -35,12 +35,16 @@ const SEL_2X2_ROT_CW_90  = 1
 const SEL_2X2_ROT_CCW_90 = 2
 const SEL_2X1_ROT_CW_90  = 3
 const SEL_2X1_ROT_CCW_90 = 4
+const SEL_1X2_ROT_CW_90  = 5
+const SEL_1X2_ROT_CCW_90 = 6
 
 var selectors = [
 	{ "type": SEL_2X2_ROT_CW_90,  "width": 2, "height": 2, "scn": preload("res://sel_2x2_rot_cw_90.scn")},
 	{ "type": SEL_2X2_ROT_CCW_90, "width": 2, "height": 2, "scn": preload("res://sel_2x2_rot_ccw_90.scn")},
 	{ "type": SEL_2X1_ROT_CW_90,  "width": 2, "height": 1, "scn": preload("res://sel_2x1_rot_cw_90.scn")},
 	{ "type": SEL_2X1_ROT_CCW_90, "width": 2, "height": 1, "scn": preload("res://sel_2x1_rot_ccw_90.scn")},
+	{ "type": SEL_1X2_ROT_CW_90,  "width": 1, "height": 2, "scn": preload("res://sel_1x2_rot_cw_90.scn")},
+	{ "type": SEL_1X2_ROT_CCW_90, "width": 1, "height": 2, "scn": preload("res://sel_1x2_rot_ccw_90.scn")},
 ]
 
 var fbridge_types = {
@@ -216,6 +220,12 @@ func apply_selector():
 	elif typ == SEL_2X1_ROT_CCW_90:
 		rotate_fbridge_ccw(p.x,   p.y)
 		rotate_fbridge_ccw(p.x+1, p.y)
+	elif typ == SEL_1X2_ROT_CW_90:
+		rotate_fbridge_cw(p.x, p.y)
+		rotate_fbridge_cw(p.x, p.y+1)
+	elif typ == SEL_1X2_ROT_CCW_90:
+		rotate_fbridge_ccw(p.x, p.y)
+		rotate_fbridge_ccw(p.x, p.y+1)
 	
 	return
 
@@ -341,7 +351,7 @@ func _process(delta):
 	elif stage == STAGE_WORKER:
 		var remaining_worker = 0
 		worker_upd += delta
-		if worker_upd > 0.05:
+		if worker_upd > 0.025:
 			for w in moving_workers:
 				if w[1] == 0 and w[2] == 0:
 					continue
@@ -365,7 +375,7 @@ func _process(delta):
 					w[0].get_node("sprite").get_node("anim").play("idle")
 				else:
 					remaining_worker += 1
-			worker_upd -= 0.05
+			worker_upd -= 0.025
 			if remaining_worker == 0:
 				set_selector(randi() % selectors.size())
 				stage = STAGE_MOVE_CURSOR
