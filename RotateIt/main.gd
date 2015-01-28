@@ -8,17 +8,24 @@ var block_sz = Vector2(48, 48)
 
 var playground_sz = Vector2(300, 300)
 
-const board_sz = Vector2(5, 5)
+const board_sz = Vector2(6, 6)
 
 var start_block = Vector2(0, 0)
 
 var scn_worker = preload("res://worker.scn")
 
+var scn_fbridge_fixed = preload("res://footbridge_fixed.scn")
 var scn_fbridge_1way = preload("res://footbridge_1way.scn")
 var scn_fbridge_2ways_90 = preload("res://footbridge_2ways_90.scn")
 var scn_fbridge_2ways_180 = preload("res://footbridge_2ways_180.scn")
 var scn_fbridge_3ways = preload("res://footbridge_3ways.scn")
 var scn_fbridge_4ways = preload("res://footbridge_4ways.scn")
+
+var scn_box_square = preload("res://box_square.scn")
+
+var layer_fbridges = null
+var layer_boxes = null
+var layer_workers = null
 
 const ACT_LEFT  = 1
 const ACT_RIGHT = 2
@@ -48,30 +55,33 @@ var selectors = [
 ]
 
 var fbridge_types = {
-	"E": { "dir":"E", "scn": scn_fbridge_1way, "frame": 0},
-	"S": { "dir":"S", "scn": scn_fbridge_1way, "frame": 4},
-	"W": { "dir":"W", "scn": scn_fbridge_1way, "frame": 8},
-	"N": { "dir":"N", "scn": scn_fbridge_1way, "frame": 12},
+	"E": { "dir":"E", "scn": scn_fbridge_1way, "frame": 0, "rotate": true },
+	"S": { "dir":"S", "scn": scn_fbridge_1way, "frame": 4, "rotate": true },
+	"W": { "dir":"W", "scn": scn_fbridge_1way, "frame": 8, "rotate": true },
+	"N": { "dir":"N", "scn": scn_fbridge_1way, "frame": 12, "rotate": true },
 	
-	"ES": { "dir":"ES", "scn": scn_fbridge_2ways_90, "frame": 0 },
-	"SW": { "dir":"SW", "scn": scn_fbridge_2ways_90, "frame": 4 },
-	"WN": { "dir":"WN", "scn": scn_fbridge_2ways_90, "frame": 8 },
-	"NE": { "dir":"NE", "scn": scn_fbridge_2ways_90, "frame": 12 },
+	"ES": { "dir":"ES", "scn": scn_fbridge_2ways_90, "frame": 0, "rotate": true },
+	"SW": { "dir":"SW", "scn": scn_fbridge_2ways_90, "frame": 4, "rotate": true },
+	"WN": { "dir":"WN", "scn": scn_fbridge_2ways_90, "frame": 8, "rotate": true },
+	"NE": { "dir":"NE", "scn": scn_fbridge_2ways_90, "frame": 12, "rotate": true },
 	
-	"EW": { "dir":"EW", "scn": scn_fbridge_2ways_180, "frame": 0 },
-	"SN": { "dir":"SN", "scn": scn_fbridge_2ways_180, "frame": 4 },
-	"WE": { "dir":"WE", "scn": scn_fbridge_2ways_180, "frame": 0 },
-	"NS": { "dir":"NS", "scn": scn_fbridge_2ways_180, "frame": 4 },
+	"EW": { "dir":"EW", "scn": scn_fbridge_2ways_180, "frame": 0, "rotate": true },
+	"SN": { "dir":"SN", "scn": scn_fbridge_2ways_180, "frame": 4, "rotate": true },
+	"WE": { "dir":"WE", "scn": scn_fbridge_2ways_180, "frame": 0, "rotate": true },
+	"NS": { "dir":"NS", "scn": scn_fbridge_2ways_180, "frame": 4, "rotate": true },
 	
-	"ESW": { "dir":"ESW", "scn": scn_fbridge_3ways, "frame": 0 },
-	"SWN": { "dir":"SWN", "scn": scn_fbridge_3ways, "frame": 4 },
-	"WNE": { "dir":"WNE", "scn": scn_fbridge_3ways, "frame": 8 },
-	"NES": { "dir":"NES", "scn": scn_fbridge_3ways, "frame": 12 },
+	"ESW": { "dir":"ESW", "scn": scn_fbridge_3ways, "frame": 0, "rotate": true },
+	"SWN": { "dir":"SWN", "scn": scn_fbridge_3ways, "frame": 4, "rotate": true },
+	"WNE": { "dir":"WNE", "scn": scn_fbridge_3ways, "frame": 8, "rotate": true },
+	"NES": { "dir":"NES", "scn": scn_fbridge_3ways, "frame": 12, "rotate": true },
 
-	"NESW": { "dir":"NESW", "scn": scn_fbridge_4ways, "frame": 0 },
-	"ESWN": { "dir":"ESWN", "scn": scn_fbridge_4ways, "frame": 0 },
-	"SWNE": { "dir":"SWNE", "scn": scn_fbridge_4ways, "frame": 0 },
-	"WNES": { "dir":"WNES", "scn": scn_fbridge_4ways, "frame": 0 },
+	"NESW": { "dir":"NESW", "scn": scn_fbridge_4ways, "frame": 0, "rotate": true },
+	"ESWN": { "dir":"ESWN", "scn": scn_fbridge_4ways, "frame": 0, "rotate": true },
+	"SWNE": { "dir":"SWNE", "scn": scn_fbridge_4ways, "frame": 0, "rotate": true },
+	"WNES": { "dir":"WNES", "scn": scn_fbridge_4ways, "frame": 0, "rotate": true },
+	
+	"NESW_FIXED": { "dir":"NESW", "scn": scn_fbridge_fixed, "frame": 0, "rotate": false }
+	
 }
 
 
@@ -79,6 +89,7 @@ var elapsed_time = 0.0
 var cur_stage_time = 0.0
 var worker_upd = 0.0
 
+var workers = []
 var moving_workers = []
 
 var board_map = []
@@ -101,6 +112,14 @@ func _ready():
 	# Initalization here
 	old_act_key = 0
 	set_process(true)
+
+	# Create sprite layers (order matters!)
+	layer_fbridges = Node2D.new()
+	add_child(layer_fbridges)
+	layer_boxes = Node2D.new()
+	add_child(layer_boxes)
+	layer_workers = Node2D.new()
+	add_child(layer_workers)
 	
 	# Create footbridges
 	randomize()
@@ -113,10 +132,9 @@ func _ready():
 		for x in range(0, board_sz.x):
 			var typ_name = fb_keys[randi() % fb_keys.size()]
 			var fb = fbridge_types[typ_name].scn.instance()
-			add_child(fb)
+			layer_fbridges.add_child(fb)
 			fb.set_pos((start_block + Vector2(x, y)) * block_sz)
 			fb.set_frame(fbridge_types[typ_name].frame)
-#			fb.get_node("anim").play("rotate_endless")
 			line[x] = [fb,typ_name]
 
 	# Create workers
@@ -133,21 +151,29 @@ func _ready():
 					wrkr = scn_worker.instance()
 				else:
 					wrkr = scn_worker.instance()
-				add_child(wrkr)
+				layer_workers.add_child(wrkr)
 				wrkr.set_pos((start_block + Vector2(x, y)) * block_sz + (block_sz/2))
 				wrkr.get_node("sprite").get_node("anim").play("idle")
 				line[x] = wrkr
+				workers.append(wrkr)
+				
 #	print(board_spr)
-
+	
+	# Create boxes
+	for i in range(0, 5):
+		var done = false
+		while not done:
+			var x = randi() % int(board_sz.x)
+			var y = randi() % int(board_sz.y)
+			if not fbridge_tab[y][x][0].get_meta("south"):
+				var bx = scn_box_square.instance()
+				layer_boxes.add_child(bx)
+				bx.set_pos((start_block + Vector2(x, y)) * block_sz + Vector2(72, 56))
+				done = true
+		
 	# Create initial selector
 	cur_selector_pos = Vector2(0, 0)
 	set_selector(randi() % selectors.size())
-#	cur_selector_idx = 1
-#	cur_selector = selectors[cur_selector_idx]["scn"].instance()
-#	cur_selector = scn_sel_2x2_rot_ccw_90.instance()
-#	cur_selector.set_pos((cur_selector_pos + start_block) * block_sz)
-#	add_child(cur_selector)
-
 
 
 func _draw():
@@ -167,6 +193,8 @@ var counter_clockwise_map = { 'N': 'W', 'W': 'S', 'S': 'E', 'E': 'N' }
 
 func rotate_fbridge_cw(x, y):
 	var cur_name = fbridge_tab[y][x][1]
+	if not fbridge_types[cur_name]["rotate"]:
+		return
 	var new_name = ""
 	for idx in range(0, cur_name.length()):
 		new_name += clockwise_map[cur_name[idx]]
@@ -176,6 +204,8 @@ func rotate_fbridge_cw(x, y):
 
 func rotate_fbridge_ccw(x, y):
 	var cur_name = fbridge_tab[y][x][1]
+	if not fbridge_types[cur_name]["rotate"]:
+		return
 	var new_name = ""
 	for idx in range(0, cur_name.length()):
 		new_name += counter_clockwise_map[cur_name[idx]]
@@ -271,7 +301,7 @@ func hide_selector():
 	remove_and_delete_child(cur_selector)
 	cur_selector = null
 
-func build_worker_action():
+func build_worker_action_old():
 	for y in range(0, board_sz.y):
 		for x in range(0, board_sz.x):
 			var spr = board_spr[y][x]
@@ -304,11 +334,71 @@ func build_worker_action():
 		board_spr[wrk[6]][wrk[5]] = wrk[0]
 		board_spr[wrk[4]][wrk[3]] = null
 
+func build_worker_action():
+	# FIXME: how to duplicate an array?
+	var workers_tmp = []
+	for wrk in workers:
+		workers_tmp.push_back(wrk)
+	print ("TTH: size ", workers.size(), workers_tmp.size())
+	print(board_spr)
+	var last_moved = 0
+	while not workers_tmp.empty():
+		if last_moved == workers_tmp.size():
+			break
+		print ("CHECK WORKER")
+		var wrk = workers_tmp[0]
+		var grid_pos = wrk.get_pos() / block_sz
+		var x = grid_pos.x
+		var y = grid_pos.y
+		var moved = false
+		# Check all directions in random order
+		var rand_dir = randi()
+		for check in range(0, 4):
+			var cur_dir = (check + rand_dir) % 4
+			if  cur_dir == 0 and x < (board_sz.x-1) and fbridge_tab[y][x][1].find('E')!=-1 and fbridge_tab[y][x+1][1].find('W')!=-1 and board_spr[y][x+1] == null:
+				# Go east
+				moving_workers.append([wrk, block_sz.x, 0, x, y, x+1, y])
+				wrk.get_node("sprite").get_node("anim").play("walk_E")
+				board_spr[y][x+1] = wrk
+				board_spr[y][x] = null
+				moved = true
+				break
+			elif cur_dir == 1 and x > 0 and fbridge_tab[y][x][1].find('W')!=-1 and fbridge_tab[y][x-1][1].find('E')!=-1 and board_spr[y][x-1] == null:
+				# Go west
+				moving_workers.append([wrk, -block_sz.x, 0, x, y, x-1, y])
+				wrk.get_node("sprite").get_node("anim").play("walk_W")
+				board_spr[y][x-1] = wrk
+				board_spr[y][x] = null
+				moved = true
+				break
+			elif cur_dir == 2 and y > 0 and fbridge_tab[y][x][1].find('N')!=-1 and fbridge_tab[y-1][x][1].find('S')!=-1 and board_spr[y-1][x] == null:
+				# Go north
+				moving_workers.append([wrk, 0, -block_sz.y, x, y, x, y-1])
+				wrk.get_node("sprite").get_node("anim").play("walk_N")
+				board_spr[y-1][x] = wrk
+				board_spr[y][x] = null
+				moved = true
+				break
+			elif  cur_dir == 3 and y < (board_sz.y-1) and fbridge_tab[y][x][1].find('S')!=-1 and fbridge_tab[y+1][x][1].find('N')!=-1 and board_spr[y+1][x] == null:
+				# Go south
+				moving_workers.append([wrk, 0, block_sz.y, x, y, x, y+1])
+				wrk.get_node("sprite").get_node("anim").play("walk_S")
+				board_spr[y+1][x] = wrk
+				board_spr[y][x] = null
+				moved = true
+				break
+		workers_tmp.remove(0)
+		if moved:
+			last_moved = 0
+		else:
+			last_moved += 1
+			workers_tmp.push_back(wrk)
+
 func _process(delta):
 
 	elapsed_time += delta
 	cur_stage_time += delta
-
+	
 	if stage == STAGE_MOVE_CURSOR:
 		var action_key = 0
 		if Input.is_action_pressed("ui_down"):
