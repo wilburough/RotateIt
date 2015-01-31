@@ -4,13 +4,12 @@ extends Node2D
 # member variables
 
 var img_background = preload("res://gfx/background.png")
-var block_sz = Vector2(48, 48)
 
-var playground_sz = Vector2(300, 300)
+var tile_sz = Vector2(48, 48)     # Size of a tile (pixels)
+var first_tile_offs = Vector2(24, 24) # Top-left coordinate of the first tile
+var playground_sz = Vector2(300, 300) # pixel
 
-const board_sz = Vector2(6, 6)
-
-var start_block = Vector2(0, 0)
+const board_tsz = Vector2(5, 5) # Nb tiles in the board (in tiles)
 
 var scn_worker = preload("res://worker.scn")
 
@@ -124,26 +123,26 @@ func _ready():
 	# Create footbridges
 	randomize()
 	var fb_keys = fbridge_types.keys()
-	fbridge_tab.resize(board_sz.y)
-	for y in range(0, board_sz.y):
+	fbridge_tab.resize(board_tsz.y)
+	for y in range(0, board_tsz.y):
 		var line = []
-		line.resize(board_sz.x)
+		line.resize(board_tsz.x)
 		fbridge_tab[y] = line
-		for x in range(0, board_sz.x):
+		for x in range(0, board_tsz.x):
 			var typ_name = fb_keys[randi() % fb_keys.size()]
 			var fb = fbridge_types[typ_name].scn.instance()
 			layer_fbridges.add_child(fb)
-			fb.set_pos((start_block + Vector2(x, y)) * block_sz)
+			fb.set_pos(get_tile_topleft(x, y))
 			fb.set_frame(fbridge_types[typ_name].frame)
 			line[x] = [fb,typ_name]
 
 	# Create workers
-	board_spr.resize(board_sz.y)
-	for y in range(0, board_sz.y):
+	board_spr.resize(board_tsz.y)
+	for y in range(0, board_tsz.y):
 		var line = []
-		line.resize(board_sz.x)
+		line.resize(board_tsz.x)
 		board_spr[y] = line
-		for x in range(0, board_sz.x):
+		for x in range(0, board_tsz.x):
 			var type = randi() % 10
 			if type < 2:
 				var wrkr
@@ -152,8 +151,9 @@ func _ready():
 				else:
 					wrkr = scn_worker.instance()
 				layer_workers.add_child(wrkr)
-				wrkr.set_pos((start_block + Vector2(x, y)) * block_sz + (block_sz/2))
+				wrkr.set_pos(get_tile_center(x, y))
 				wrkr.get_node("sprite").get_node("anim").play("idle")
+				wrkr.set_meta("tpos", Vector2(x, y))
 				line[x] = wrkr
 				workers.append(wrkr)
 				
@@ -163,12 +163,12 @@ func _ready():
 	for i in range(0, 5):
 		var done = false
 		while not done:
-			var x = randi() % int(board_sz.x)
-			var y = randi() % int(board_sz.y)
+			var x = randi() % int(board_tsz.x)
+			var y = randi() % int(board_tsz.y)
 			if not fbridge_tab[y][x][0].get_meta("south"):
 				var bx = scn_box_square.instance()
 				layer_boxes.add_child(bx)
-				bx.set_pos((start_block + Vector2(x, y)) * block_sz + Vector2(72, 56))
+				bx.set_pos(get_tile_center(x, y) + Vector2(0, 14))
 				done = true
 		
 	# Create initial selector
@@ -186,6 +186,20 @@ func _draw():
 	for x in range(0, xmax):
 		for y in range(0, ymax):
 			draw_texture_rect(img_background, Rect2(Vector2(x*iw, y*ih), Vector2(iw, ih)), false)
+
+func get_tile_center(xtile, ytile):
+	return ((Vector2(xtile, ytile) * tile_sz) + first_tile_offs + (tile_sz / 2))
+
+func get_tile_topleft(xtile, ytile):
+	return ((Vector2(xtile, ytile) * tile_sz) + first_tile_offs)
+
+func get_worker_tpos(wrkr):
+#	return (wrkr.get_pos() - first_tile_offs) / tile_sz
+	return wrkr.get_meta("tpos")
+
+func set_worker_tpos(wrkr, tpos):
+#	return (wrkr.get_pos() - first_tile_offs) / tile_sz
+	wrkr.set_meta("tpos", tpos)
 
 
 var clockwise_map = { 'N': 'E', 'E': 'S', 'S': 'W', 'W': 'N' }
@@ -218,7 +232,7 @@ func move_selector_left():
 		cur_selector_pos.x -= 1
 
 func move_selector_right():
-	if cur_selector_pos.x < board_sz.x - selectors[cur_selector_idx]["width"]:
+	if cur_selector_pos.x < board_tsz.x - selectors[cur_selector_idx]["width"]:
 		cur_selector_pos.x += 1
 
 func move_selector_up():
@@ -226,7 +240,7 @@ func move_selector_up():
 		cur_selector_pos.y -= 1
 
 func move_selector_down():
-	if cur_selector_pos.y < board_sz.y - selectors[cur_selector_idx]["height"]:
+	if cur_selector_pos.y < board_tsz.y - selectors[cur_selector_idx]["height"]:
 		cur_selector_pos.y += 1
 
 func apply_selector():
@@ -281,20 +295,20 @@ func apply_selector():
 	for y in range(p.y, p.y + selectors[cur_selector_idx]["height"]):
 		for x in range(p.x, p.x + selectors[cur_selector_idx]["width"]):
 			if board_spr[y][x] != null:
-				board_spr[y][x].set_pos((Vector2(x, y) + start_block) * block_sz + (block_sz/2))
+				board_spr[y][x].set_pos(get_tile_topleft(x, y))
 
 func set_selector(idx):
 	if cur_selector:
 		remove_and_delete_child(cur_selector)
 	cur_selector_idx = idx
 #	cur_selector_pos = Vector2(0, 0)
-	if cur_selector_pos.x > board_sz.x - selectors[cur_selector_idx]["width"]:
-		cur_selector_pos.x = board_sz.x - selectors[cur_selector_idx]["width"]
-	if cur_selector_pos.y > board_sz.y - selectors[cur_selector_idx]["height"]:
-		cur_selector_pos.y = board_sz.y - selectors[cur_selector_idx]["height"]
+	if cur_selector_pos.x > board_tsz.x - selectors[cur_selector_idx]["width"]:
+		cur_selector_pos.x = board_tsz.x - selectors[cur_selector_idx]["width"]
+	if cur_selector_pos.y > board_tsz.y - selectors[cur_selector_idx]["height"]:
+		cur_selector_pos.y = board_tsz.y - selectors[cur_selector_idx]["height"]
 	cur_selector = selectors[cur_selector_idx]["scn"].instance()
 #	cur_selector = scn_sel_2x2_rot_ccw_90.instance()
-	cur_selector.set_pos((cur_selector_pos + start_block) * block_sz)
+	cur_selector.set_pos(get_tile_topleft(cur_selector_pos.x, cur_selector_pos.y))
 	add_child(cur_selector)
 
 func hide_selector():
@@ -302,32 +316,32 @@ func hide_selector():
 	cur_selector = null
 
 func build_worker_action_old():
-	for y in range(0, board_sz.y):
-		for x in range(0, board_sz.x):
+	for y in range(0, board_tsz.y):
+		for x in range(0, board_tsz.x):
 			var spr = board_spr[y][x]
 			if spr != null:
 				# Check all directions in random order
 				var rand_dir = randi()
 				for check in range(0, 4):
 					var cur_dir = (check + rand_dir) % 4
-					if  cur_dir == 0 and x < (board_sz.x-1) and fbridge_tab[y][x][1].find('E')!=-1 and fbridge_tab[y][x+1][1].find('W')!=-1:
+					if  cur_dir == 0 and x < (board_tsz.x-1) and fbridge_tab[y][x][1].find('E')!=-1 and fbridge_tab[y][x+1][1].find('W')!=-1:
 						# Go east
-						moving_workers.append([spr, block_sz.x, 0, x, y, x+1, y])
+						moving_workers.append([spr, tile_sz.x, 0, x, y, x+1, y])
 						spr.get_node("sprite").get_node("anim").play("walk_E")
 						break
 					elif cur_dir == 1 and x > 0 and fbridge_tab[y][x][1].find('W')!=-1 and fbridge_tab[y][x-1][1].find('E')!=-1:
 						# Go west
-						moving_workers.append([spr, -block_sz.x, 0, x, y, x-1, y])
+						moving_workers.append([spr, -tile_sz.x, 0, x, y, x-1, y])
 						spr.get_node("sprite").get_node("anim").play("walk_W")
 						break
 					elif cur_dir == 2 and y > 0 and fbridge_tab[y][x][1].find('N')!=-1 and fbridge_tab[y-1][x][1].find('S')!=-1:
 						# Go north
-						moving_workers.append([spr, 0, -block_sz.y, x, y, x, y-1])
+						moving_workers.append([spr, 0, -tile_sz.y, x, y, x, y-1])
 						spr.get_node("sprite").get_node("anim").play("walk_N")
 						break
-					elif  cur_dir == 3 and y < (board_sz.y-1) and fbridge_tab[y][x][1].find('S')!=-1 and fbridge_tab[y+1][x][1].find('N')!=-1:
+					elif  cur_dir == 3 and y < (board_tsz.y-1) and fbridge_tab[y][x][1].find('S')!=-1 and fbridge_tab[y+1][x][1].find('N')!=-1:
 						# Go south
-						moving_workers.append([spr, 0, block_sz.y, x, y, x, y+1])
+						moving_workers.append([spr, 0, tile_sz.y, x, y, x, y+1])
 						spr.get_node("sprite").get_node("anim").play("walk_S")
 						break
 	for wrk in moving_workers:
@@ -347,7 +361,7 @@ func build_worker_action():
 			break
 		print ("CHECK WORKER")
 		var wrk = workers_tmp[0]
-		var grid_pos = wrk.get_pos() / block_sz
+		var grid_pos = get_worker_tpos(wrk)
 		var x = grid_pos.x
 		var y = grid_pos.y
 		var moved = false
@@ -355,34 +369,38 @@ func build_worker_action():
 		var rand_dir = randi()
 		for check in range(0, 4):
 			var cur_dir = (check + rand_dir) % 4
-			if  cur_dir == 0 and x < (board_sz.x-1) and fbridge_tab[y][x][1].find('E')!=-1 and fbridge_tab[y][x+1][1].find('W')!=-1 and board_spr[y][x+1] == null:
+			if  cur_dir == 0 and x < (board_tsz.x-1) and fbridge_tab[y][x][1].find('E')!=-1 and fbridge_tab[y][x+1][1].find('W')!=-1 and board_spr[y][x+1] == null:
 				# Go east
-				moving_workers.append([wrk, block_sz.x, 0, x, y, x+1, y])
+				moving_workers.append([wrk, tile_sz.x, 0, x, y, x+1, y])
 				wrk.get_node("sprite").get_node("anim").play("walk_E")
+				set_worker_tpos(wrk, Vector2(x+1, y))
 				board_spr[y][x+1] = wrk
 				board_spr[y][x] = null
 				moved = true
 				break
 			elif cur_dir == 1 and x > 0 and fbridge_tab[y][x][1].find('W')!=-1 and fbridge_tab[y][x-1][1].find('E')!=-1 and board_spr[y][x-1] == null:
 				# Go west
-				moving_workers.append([wrk, -block_sz.x, 0, x, y, x-1, y])
+				moving_workers.append([wrk, -tile_sz.x, 0, x, y, x-1, y])
 				wrk.get_node("sprite").get_node("anim").play("walk_W")
+				set_worker_tpos(wrk, Vector2(x-1, y))
 				board_spr[y][x-1] = wrk
 				board_spr[y][x] = null
 				moved = true
 				break
 			elif cur_dir == 2 and y > 0 and fbridge_tab[y][x][1].find('N')!=-1 and fbridge_tab[y-1][x][1].find('S')!=-1 and board_spr[y-1][x] == null:
 				# Go north
-				moving_workers.append([wrk, 0, -block_sz.y, x, y, x, y-1])
+				moving_workers.append([wrk, 0, -tile_sz.y, x, y, x, y-1])
 				wrk.get_node("sprite").get_node("anim").play("walk_N")
+				set_worker_tpos(wrk, Vector2(x, y-1))
 				board_spr[y-1][x] = wrk
 				board_spr[y][x] = null
 				moved = true
 				break
-			elif  cur_dir == 3 and y < (board_sz.y-1) and fbridge_tab[y][x][1].find('S')!=-1 and fbridge_tab[y+1][x][1].find('N')!=-1 and board_spr[y+1][x] == null:
+			elif  cur_dir == 3 and y < (board_tsz.y-1) and fbridge_tab[y][x][1].find('S')!=-1 and fbridge_tab[y+1][x][1].find('N')!=-1 and board_spr[y+1][x] == null:
 				# Go south
-				moving_workers.append([wrk, 0, block_sz.y, x, y, x, y+1])
+				moving_workers.append([wrk, 0, tile_sz.y, x, y, x, y+1])
 				wrk.get_node("sprite").get_node("anim").play("walk_S")
+				set_worker_tpos(wrk, Vector2(x, y+1))
 				board_spr[y+1][x] = wrk
 				board_spr[y][x] = null
 				moved = true
@@ -419,7 +437,7 @@ func _process(delta):
 			if not old_act_key & ACT_RIGHT:
 				move_selector_right()
 
-		cur_selector.set_pos((cur_selector_pos + start_block) * block_sz)
+		cur_selector.set_pos(get_tile_topleft(cur_selector_pos.x, cur_selector_pos.y))
 		
 		if Input.is_action_pressed("ui_accept"):
 			action_key |= ACT_APPLY
@@ -469,7 +487,6 @@ func _process(delta):
 			if remaining_worker == 0:
 				set_selector(randi() % selectors.size())
 				stage = STAGE_MOVE_CURSOR
-
 	
 	# Exit game?
 	if(Input.is_action_pressed("exit")):
