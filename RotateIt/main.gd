@@ -5,9 +5,12 @@ extends Node2D
 
 var img_background = preload("res://gfx/background.png")
 
+var img_docks = preload("res://gfx/dock.png")
+
+
 var tile_sz = Vector2(48, 48)     # Size of a tile (pixels)
 var first_tile_offs = Vector2(24, 24) # Top-left coordinate of the first tile
-var playground_sz = Vector2(300, 300) # pixel
+var playground_sz = Vector2(288, 288) # pixel
 
 const board_tsz = Vector2(5, 5) # Nb tiles in the board (in tiles)
 
@@ -54,10 +57,10 @@ var selectors = [
 ]
 
 var fbridge_types = {
-	"E": { "dir":"E", "scn": scn_fbridge_1way, "frame": 0, "rotate": true },
-	"S": { "dir":"S", "scn": scn_fbridge_1way, "frame": 4, "rotate": true },
-	"W": { "dir":"W", "scn": scn_fbridge_1way, "frame": 8, "rotate": true },
-	"N": { "dir":"N", "scn": scn_fbridge_1way, "frame": 12, "rotate": true },
+#	"E": { "dir":"E", "scn": scn_fbridge_1way, "frame": 0, "rotate": true },
+#	"S": { "dir":"S", "scn": scn_fbridge_1way, "frame": 4, "rotate": true },
+#	"W": { "dir":"W", "scn": scn_fbridge_1way, "frame": 8, "rotate": true },
+#	"N": { "dir":"N", "scn": scn_fbridge_1way, "frame": 12, "rotate": true },
 	
 	"ES": { "dir":"ES", "scn": scn_fbridge_2ways_90, "frame": 0, "rotate": true },
 	"SW": { "dir":"SW", "scn": scn_fbridge_2ways_90, "frame": 4, "rotate": true },
@@ -140,7 +143,15 @@ func _ready():
 		line.resize(board_tsz.x)
 		fbridge_tab[y] = line
 		for x in range(0, board_tsz.x):
-			var typ_name = fb_keys[randi() % fb_keys.size()]
+			var typ_name = null
+			while typ_name == null:
+				typ_name = fb_keys[randi() % fb_keys.size()]
+				if board_tsz.x == 5 and board_tsz.y == 5:
+					# Handle specific constraints
+					if (x == 1 and y == 1) or (x == 3 and y == 1) or (x == 1 and y == 3) or (x == 3 and y == 3):
+						typ_name = "NESW_FIXED"
+					elif typ_name == "NESW_FIXED":
+						typ_name = null
 			var fb = fbridge_types[typ_name].scn.instance()
 			layer_fbridges.add_child(fb)
 			fb.set_pos(get_tile_topleft(x, y))
@@ -148,6 +159,7 @@ func _ready():
 			line[x] = {"spr": fb, "type": typ_name, "N": null, "E": null, "S": null, "W": null}
 
 	# Create workers
+	var max_workers = 3
 	board_spr.resize(board_tsz.y)
 	for y in range(0, board_tsz.y):
 		var line = []
@@ -155,7 +167,7 @@ func _ready():
 		board_spr[y] = line
 		for x in range(0, board_tsz.x):
 			var type = randi() % 10
-			if type < 2:
+			if type < 2 and workers.size() < max_workers:
 				var wrkr
 				if type == 0:
 					wrkr = scn_worker.instance()
@@ -168,24 +180,38 @@ func _ready():
 				line[x] = wrkr
 				workers.append(wrkr)
 				
+				# Create box
+				var dir = get_random_dir()
+				
+				while true:
+					if fbridge_tab[y][x]['type'].find(dir) != -1 and not fbridge_tab[y][x][dir]:
+						var bx = scn_box_square.instance()
+						layer_boxes.add_child(bx)
+						bx.set_pos(get_tile_center(x, y) + box_offs[dir])
+						fbridge_tab[y][x][dir] = bx
+						boxes.append(bx)
+						break
+					else:
+						dir = clockwise_map[dir]
+
 #	print(board_spr)
 	
 	# Create boxes
-	for i in range(0, 5):
-		var done = false
-		while not done:
-			var x = randi() % int(board_tsz.x)
-			var y = randi() % int(board_tsz.y)
-			var dir = get_random_dir()
-			print(fbridge_tab)
-			if fbridge_tab[y][x]['type'].find(dir) != -1 and not fbridge_tab[y][x][dir]:
-				var bx = scn_box_square.instance()
-				layer_boxes.add_child(bx)
-				bx.set_pos(get_tile_center(x, y) + box_offs[dir])
-				fbridge_tab[y][x][dir] = bx
-				boxes.append(bx)
-				done = true
-		
+#	for i in range(0, 1):
+#		var done = false
+#		while not done:
+#			var x = randi() % int(board_tsz.x)
+#			var y = randi() % int(board_tsz.y)
+#			var dir = get_random_dir()
+#			print(fbridge_tab)
+#			if fbridge_tab[y][x]['type'].find(dir) != -1 and not fbridge_tab[y][x][dir]:
+#				var bx = scn_box_square.instance()
+#				layer_boxes.add_child(bx)
+#				bx.set_pos(get_tile_center(x, y) + box_offs[dir])
+#				fbridge_tab[y][x][dir] = bx
+#				boxes.append(bx)
+#				done = true
+#		
 	# Create initial selector
 	cur_selector_pos = Vector2(0, 0)
 	set_selector(randi() % selectors.size())
@@ -201,6 +227,18 @@ func _draw():
 	for x in range(0, xmax):
 		for y in range(0, ymax):
 			draw_texture_rect(img_background, Rect2(Vector2(x*iw, y*ih), Vector2(iw, ih)), false)
+	# Draw Dock (FIXME: to do it only once, at startup)
+	draw_texture_rect_region(img_docks, Rect2(Vector2(0,0), Vector2(48, 48)), Rect2(Vector2(0, 0), Vector2(48,48)))
+	draw_texture_rect_region(img_docks, Rect2(get_tile_topleft(board_tsz.x, 0)+Vector2(-24,-24), Vector2(48, 48)), Rect2(Vector2(2*48, 0), Vector2(48,48)))
+	draw_texture_rect_region(img_docks, Rect2(get_tile_topleft(0,board_tsz.y)+Vector2(-24,-24), Vector2(48, 48)), Rect2(Vector2(0, 2*48), Vector2(48,48)))
+	draw_texture_rect_region(img_docks, Rect2(get_tile_topleft(board_tsz.x,board_tsz.y)+Vector2(-24,-24), Vector2(48, 48)), Rect2(Vector2(2*48, 2*48), Vector2(48,48)))
+	for x in range(0, board_tsz.x):
+		draw_texture_rect_region(img_docks, Rect2(get_tile_topleft(x, 0)-Vector2(0,24), Vector2(48, 48)), Rect2(Vector2(48, 0), Vector2(48,48)))
+		draw_texture_rect_region(img_docks, Rect2(get_tile_topleft(x, board_tsz.y)-Vector2(0,24), Vector2(48, 48)), Rect2(Vector2(48, 48*2), Vector2(48,48)))
+	for y in range(0, board_tsz.y):
+		draw_texture_rect_region(img_docks, Rect2(get_tile_topleft(0, y)-Vector2(24,0), Vector2(48, 48)), Rect2(Vector2(0, 48), Vector2(48,48)))
+		draw_texture_rect_region(img_docks, Rect2(get_tile_topleft(board_tsz.x, y)-Vector2(24,0), Vector2(48, 48)), Rect2(Vector2(48*2, 48), Vector2(48,48)))
+	
 
 func get_tile_center(xtile, ytile):
 	return ((Vector2(xtile, ytile) * tile_sz) + first_tile_offs + (tile_sz / 2))
@@ -391,12 +429,12 @@ func build_worker_action_old():
 		board_spr[wrk[6]][wrk[5]] = wrk[0]
 		board_spr[wrk[4]][wrk[3]] = null
 
-func build_worker_action():
+func build_worker_action_old2():
 	# FIXME: how to duplicate an array?
 	var workers_tmp = []
 	for wrk in workers:
 		workers_tmp.push_back(wrk)
-	print ("TTH: size ", workers.size(), workers_tmp.size())
+	print ("TTH: size ", workers.size(), " (copy: ", workers_tmp.size(), ")")
 	print(board_spr)
 	var last_moved = 0
 	while not workers_tmp.empty():
@@ -454,6 +492,98 @@ func build_worker_action():
 		else:
 			last_moved += 1
 			workers_tmp.push_back(wrk)
+
+func build_worker_action():
+	# FIXME: how to duplicate an array?
+	var moving_boxes = []
+	var workers_tmp = []
+	for wrk in workers:
+		workers_tmp.push_back(wrk)
+	print ("TTH: worker list size: ", workers.size(), " (copy:",  workers_tmp.size(), ")")
+	print(board_spr)
+	var last_moved = 0
+	while not workers_tmp.empty():
+		if last_moved == workers_tmp.size():
+			print("All remaining workers blocked?")
+			break
+		print ("Check worker")
+		var wrk = workers_tmp[0]
+		var grid_pos = get_worker_tpos(wrk)
+		var x = grid_pos.x
+		var y = grid_pos.y
+		var moved = false
+		# Locate the box
+		for dir in directions:
+			if fbridge_tab[y][x][dir] != null:
+				print("  Found box ", dir)
+				if  dir == 'E' and x < (board_tsz.x-1) and fbridge_tab[y][x]['type'].find('E')!=-1 and fbridge_tab[y][x+1]['type'].find('W')!=-1 and board_spr[y][x+1] == null:
+					# Go east
+					moving_workers.append([wrk, tile_sz.x, 0, x, y, x+1, y])
+					moving_boxes.append([fbridge_tab[y][x][dir], x, y, x+1, y, 'E'])
+					wrk.get_node("sprite").get_node("anim").play("walk_E")
+					set_worker_tpos(wrk, Vector2(x+1, y))
+					board_spr[y][x+1] = wrk
+					board_spr[y][x] = null
+					moved = true
+					break
+				elif dir == 'W' and x > 0 and fbridge_tab[y][x]['type'].find('W')!=-1 and fbridge_tab[y][x-1]['type'].find('E')!=-1 and board_spr[y][x-1] == null:
+					# Go west
+					moving_workers.append([wrk, -tile_sz.x, 0, x, y, x-1, y])
+					moving_boxes.append([fbridge_tab[y][x][dir], x, y, x-1, y, 'W'])
+					wrk.get_node("sprite").get_node("anim").play("walk_W")
+					set_worker_tpos(wrk, Vector2(x-1, y))
+					board_spr[y][x-1] = wrk
+					board_spr[y][x] = null
+					moved = true
+					break
+				elif dir == 'N' and y > 0 and fbridge_tab[y][x]['type'].find('N')!=-1 and fbridge_tab[y-1][x]['type'].find('S')!=-1 and board_spr[y-1][x] == null:
+					# Go north
+					moving_workers.append([wrk, 0, -tile_sz.y, x, y, x, y-1, 'N'])
+					moving_boxes.append([fbridge_tab[y][x][dir], x, y, x, y-1, 'N'])
+					wrk.get_node("sprite").get_node("anim").play("walk_N")
+					set_worker_tpos(wrk, Vector2(x, y-1))
+					board_spr[y-1][x] = wrk
+					board_spr[y][x] = null
+					moved = true
+					break
+				elif dir == 'S' and y < (board_tsz.y-1) and fbridge_tab[y][x]['type'].find('S')!=-1 and fbridge_tab[y+1][x]['type'].find('N')!=-1 and board_spr[y+1][x] == null:
+					# Go south
+					moving_workers.append([wrk, 0, tile_sz.y, x, y, x, y+1, 'S'])
+					moving_boxes.append([fbridge_tab[y][x][dir], x, y, x, y+1, 'S'])
+					wrk.get_node("sprite").get_node("anim").play("walk_S")
+					set_worker_tpos(wrk, Vector2(x, y+1))
+					board_spr[y+1][x] = wrk
+					board_spr[y][x] = null
+					moved = true
+					break
+		workers_tmp.remove(0)
+		if moved:
+			last_moved = 0
+		else:
+			last_moved += 1
+			workers_tmp.push_back(wrk)
+	for mv in moving_boxes:
+		var spr = mv[0]
+		var oldx = mv[1]
+		var oldy = mv[2]
+		var newx = mv[3]
+		var newy = mv[4]
+		var olddir = mv[5]
+		if fbridge_tab[oldy][oldx][olddir] == spr:
+			# Check needed to avoid removing a previous moving boxes
+			fbridge_tab[oldy][oldx][olddir] = null
+		var newdir
+		if fbridge_tab[newy][newx]['type'].find(olddir) != -1:
+			newdir = olddir
+		elif fbridge_tab[newy][newx]['type'].find(clockwise_map[olddir]) != -1:
+			newdir = clockwise_map[olddir]
+		else:
+			assert(fbridge_tab[newy][newx]['type'].find(counter_clockwise_map[olddir]) != -1)
+			newdir = counter_clockwise_map[olddir]
+		# FIXME: move box as an animation
+		fbridge_tab[newy][newx][newdir] = spr
+		spr.set_pos(get_tile_center(newx, newy) + box_offs[newdir])
+
 
 func _process(delta):
 
