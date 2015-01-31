@@ -83,6 +83,12 @@ var fbridge_types = {
 	
 }
 
+var clockwise_map = { 'N': 'E', 'E': 'S', 'S': 'W', 'W': 'N' }
+var counter_clockwise_map = { 'N': 'W', 'W': 'S', 'S': 'E', 'E': 'N' }
+var directions = ['N', 'S', 'E', 'W']
+
+var box_offs = {'N': Vector2(0, -18), 'S': Vector2(0, 18), 'E': Vector2(18, 0), 'W': Vector2(-18, 0)}
+
 
 var elapsed_time = 0.0
 var cur_stage_time = 0.0
@@ -90,6 +96,8 @@ var worker_upd = 0.0
 
 var workers = []
 var moving_workers = []
+
+var boxes = []
 
 var board_map = []
 var board_spr = [] # sprites
@@ -99,6 +107,9 @@ var cur_selector_pos = Vector2(1, 1) # selector coord in block unit
 var cur_selector_idx = 0
 
 var old_act_key = 0
+
+func get_random_dir():
+	return directions[randi() % 4]
 
 func resize():
 	var root = get_tree().get_root()
@@ -134,7 +145,7 @@ func _ready():
 			layer_fbridges.add_child(fb)
 			fb.set_pos(get_tile_topleft(x, y))
 			fb.set_frame(fbridge_types[typ_name].frame)
-			line[x] = [fb,typ_name]
+			line[x] = {"spr": fb, "type": typ_name, "N": null, "E": null, "S": null, "W": null}
 
 	# Create workers
 	board_spr.resize(board_tsz.y)
@@ -165,10 +176,14 @@ func _ready():
 		while not done:
 			var x = randi() % int(board_tsz.x)
 			var y = randi() % int(board_tsz.y)
-			if not fbridge_tab[y][x][0].get_meta("south"):
+			var dir = get_random_dir()
+			print(fbridge_tab)
+			if fbridge_tab[y][x]['type'].find(dir) != -1 and not fbridge_tab[y][x][dir]:
 				var bx = scn_box_square.instance()
 				layer_boxes.add_child(bx)
-				bx.set_pos(get_tile_center(x, y) + Vector2(0, 14))
+				bx.set_pos(get_tile_center(x, y) + box_offs[dir])
+				fbridge_tab[y][x][dir] = bx
+				boxes.append(bx)
 				done = true
 		
 	# Create initial selector
@@ -202,30 +217,58 @@ func set_worker_tpos(wrkr, tpos):
 	wrkr.set_meta("tpos", tpos)
 
 
-var clockwise_map = { 'N': 'E', 'E': 'S', 'S': 'W', 'W': 'N' }
-var counter_clockwise_map = { 'N': 'W', 'W': 'S', 'S': 'E', 'E': 'N' }
-
 func rotate_fbridge_cw(x, y):
-	var cur_name = fbridge_tab[y][x][1]
+	var fb = fbridge_tab[y][x]
+	var cur_name = fb['type']
 	if not fbridge_types[cur_name]["rotate"]:
 		return
 	var new_name = ""
 	for idx in range(0, cur_name.length()):
 		new_name += clockwise_map[cur_name[idx]]
 	print("OLD:", cur_name, " NEW:", new_name)
-	fbridge_tab[y][x][0].get_node("anim").play("rotate_"+cur_name[0]+"_to_"+new_name[0])
-	fbridge_tab[y][x][1] = new_name
+	fb['spr'].get_node("anim").play("rotate_"+cur_name[0]+"_to_"+new_name[0])
+	fb['type'] = new_name
+	# Rotate boxes
+	var dir = 'N'
+	var bx_sav = fb[dir]
+	for i in range(0, 4):
+		var src_dir = counter_clockwise_map[dir]
+		var bx
+		if i == 3:
+			bx = bx_sav
+		else:
+			bx = fb[src_dir]
+		if bx != null:
+			bx.set_pos(get_tile_center(x, y) + box_offs[dir]) # FIXME: animate
+		fb[dir] = bx
+		dir = src_dir
+		
 
 func rotate_fbridge_ccw(x, y):
-	var cur_name = fbridge_tab[y][x][1]
+	var fb = fbridge_tab[y][x]
+	var cur_name = fb['type']
 	if not fbridge_types[cur_name]["rotate"]:
 		return
 	var new_name = ""
 	for idx in range(0, cur_name.length()):
 		new_name += counter_clockwise_map[cur_name[idx]]
 	print("OLD:", cur_name, " NEW:", new_name)
-	fbridge_tab[y][x][0].get_node("anim").play("rotate_"+cur_name[0]+"_to_"+new_name[0])
-	fbridge_tab[y][x][1] = new_name
+	fb['spr'].get_node("anim").play("rotate_"+cur_name[0]+"_to_"+new_name[0])
+	fb['type'] = new_name
+	# Rotate boxes
+	var dir = 'N'
+	var bx_sav = fb[dir]
+	for i in range(0, 4):
+		var src_dir = clockwise_map[dir]
+		var bx
+		if i == 3:
+			bx = bx_sav
+		else:
+			bx = fb[src_dir]
+		if bx != null:
+			bx.set_pos(get_tile_center(x, y) + box_offs[dir]) # FIXME: animate
+		fb[dir] = bx
+		dir = src_dir
 
 func move_selector_left():
 	if cur_selector_pos.x  > 0:
@@ -324,22 +367,22 @@ func build_worker_action_old():
 				var rand_dir = randi()
 				for check in range(0, 4):
 					var cur_dir = (check + rand_dir) % 4
-					if  cur_dir == 0 and x < (board_tsz.x-1) and fbridge_tab[y][x][1].find('E')!=-1 and fbridge_tab[y][x+1][1].find('W')!=-1:
+					if  cur_dir == 0 and x < (board_tsz.x-1) and fbridge_tab[y][x]['type'].find('E')!=-1 and fbridge_tab[y][x+1]['type'].find('W')!=-1:
 						# Go east
 						moving_workers.append([spr, tile_sz.x, 0, x, y, x+1, y])
 						spr.get_node("sprite").get_node("anim").play("walk_E")
 						break
-					elif cur_dir == 1 and x > 0 and fbridge_tab[y][x][1].find('W')!=-1 and fbridge_tab[y][x-1][1].find('E')!=-1:
+					elif cur_dir == 1 and x > 0 and fbridge_tab[y][x]['type'].find('W')!=-1 and fbridge_tab[y][x-1]['type'].find('E')!=-1:
 						# Go west
 						moving_workers.append([spr, -tile_sz.x, 0, x, y, x-1, y])
 						spr.get_node("sprite").get_node("anim").play("walk_W")
 						break
-					elif cur_dir == 2 and y > 0 and fbridge_tab[y][x][1].find('N')!=-1 and fbridge_tab[y-1][x][1].find('S')!=-1:
+					elif cur_dir == 2 and y > 0 and fbridge_tab[y][x]['type'].find('N')!=-1 and fbridge_tab[y-1][x]['type'].find('S')!=-1:
 						# Go north
 						moving_workers.append([spr, 0, -tile_sz.y, x, y, x, y-1])
 						spr.get_node("sprite").get_node("anim").play("walk_N")
 						break
-					elif  cur_dir == 3 and y < (board_tsz.y-1) and fbridge_tab[y][x][1].find('S')!=-1 and fbridge_tab[y+1][x][1].find('N')!=-1:
+					elif  cur_dir == 3 and y < (board_tsz.y-1) and fbridge_tab[y][x]['type'].find('S')!=-1 and fbridge_tab[y+1][x]['type'].find('N')!=-1:
 						# Go south
 						moving_workers.append([spr, 0, tile_sz.y, x, y, x, y+1])
 						spr.get_node("sprite").get_node("anim").play("walk_S")
@@ -369,7 +412,7 @@ func build_worker_action():
 		var rand_dir = randi()
 		for check in range(0, 4):
 			var cur_dir = (check + rand_dir) % 4
-			if  cur_dir == 0 and x < (board_tsz.x-1) and fbridge_tab[y][x][1].find('E')!=-1 and fbridge_tab[y][x+1][1].find('W')!=-1 and board_spr[y][x+1] == null:
+			if  cur_dir == 0 and x < (board_tsz.x-1) and fbridge_tab[y][x]['type'].find('E')!=-1 and fbridge_tab[y][x+1]['type'].find('W')!=-1 and board_spr[y][x+1] == null:
 				# Go east
 				moving_workers.append([wrk, tile_sz.x, 0, x, y, x+1, y])
 				wrk.get_node("sprite").get_node("anim").play("walk_E")
@@ -378,7 +421,7 @@ func build_worker_action():
 				board_spr[y][x] = null
 				moved = true
 				break
-			elif cur_dir == 1 and x > 0 and fbridge_tab[y][x][1].find('W')!=-1 and fbridge_tab[y][x-1][1].find('E')!=-1 and board_spr[y][x-1] == null:
+			elif cur_dir == 1 and x > 0 and fbridge_tab[y][x]['type'].find('W')!=-1 and fbridge_tab[y][x-1]['type'].find('E')!=-1 and board_spr[y][x-1] == null:
 				# Go west
 				moving_workers.append([wrk, -tile_sz.x, 0, x, y, x-1, y])
 				wrk.get_node("sprite").get_node("anim").play("walk_W")
@@ -387,7 +430,7 @@ func build_worker_action():
 				board_spr[y][x] = null
 				moved = true
 				break
-			elif cur_dir == 2 and y > 0 and fbridge_tab[y][x][1].find('N')!=-1 and fbridge_tab[y-1][x][1].find('S')!=-1 and board_spr[y-1][x] == null:
+			elif cur_dir == 2 and y > 0 and fbridge_tab[y][x]['type'].find('N')!=-1 and fbridge_tab[y-1][x]['type'].find('S')!=-1 and board_spr[y-1][x] == null:
 				# Go north
 				moving_workers.append([wrk, 0, -tile_sz.y, x, y, x, y-1])
 				wrk.get_node("sprite").get_node("anim").play("walk_N")
@@ -396,7 +439,7 @@ func build_worker_action():
 				board_spr[y][x] = null
 				moved = true
 				break
-			elif  cur_dir == 3 and y < (board_tsz.y-1) and fbridge_tab[y][x][1].find('S')!=-1 and fbridge_tab[y+1][x][1].find('N')!=-1 and board_spr[y+1][x] == null:
+			elif  cur_dir == 3 and y < (board_tsz.y-1) and fbridge_tab[y][x]['type'].find('S')!=-1 and fbridge_tab[y+1][x]['type'].find('N')!=-1 and board_spr[y+1][x] == null:
 				# Go south
 				moving_workers.append([wrk, 0, tile_sz.y, x, y, x, y+1])
 				wrk.get_node("sprite").get_node("anim").play("walk_S")
